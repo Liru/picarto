@@ -1,28 +1,11 @@
+// Package stream manages Picarto streams, based on artist names. It currently
+// wraps itself around rtmpdump and creates notifications if a stream is active.
 package stream
 
 import (
-	// "bytes"
-	// "log"
-	"os/exec"
+	"log"
 	"sync"
-	// "time"
 )
-
-// ArtistNotification keeps track of all the data needed to show that a certain artist is online.
-type ArtistNotification struct {
-	Name string
-}
-
-// An Artist holds all the data needed to track an artist stream.
-type Artist struct {
-	Name string
-
-	// Online is used to inform monitors that the artist has started streaming.
-	Online chan ArtistNotification
-
-	// Stream holds the RTMPDump info needed to get stream information.
-	Stream *exec.Cmd
-}
 
 // An ArtistMap contains all the Artists being tracked. They can be looked up via their standard
 // string representation.
@@ -31,12 +14,13 @@ type ArtistMap map[string]*Artist
 // AddArtist adds a new instance of an artist to an ArtistMap after starting an RTMPDump instance for them.
 func (a ArtistMap) AddArtist(name string) {
 
-	cmd := exec.Command("rtmpdump", "-r", "rtmp://167.114.157.137:1935/golive/?/"+name)
-
 	artist := &Artist{Name: name,
 		Online: make(chan ArtistNotification),
-		Stream: cmd}
+	}
 	a[name] = artist
+	if err := artist.Poll(); err != nil {
+		log.Fatal(err)
+	}
 
 }
 
@@ -44,15 +28,19 @@ func (a ArtistMap) AddArtist(name string) {
 // after itself beforehand.
 // TODO: Check if the artist name is in ArtistMap first
 func (a ArtistMap) RemoveArtist(name string) {
-	close(a[name].Online)
-	a[name].Stream.Process.Kill()
-	a[name].Stream.Process.Wait()
+	artist := a[name]
+	close(artist.Online)
+	artist.Stop()
 	delete(a, name)
 }
 
-// MakeAnnounceChan takes all the artists stored in the artist map,
+// MakeAnnounceChan takes a channel of empty structs as a parameter.
+// It takes all the artists stored in the artist map,
 // and returns a channel that combines all of their notification
 // channels into one.
+//
+// To indicate that the artist notification channel should be closed, just close the `done` channel.
+//
 // NOTE: Only one announcement channel should be run for a map at any time.
 func (a ArtistMap) MakeAnnounceChan(done <-chan struct{}) <-chan ArtistNotification {
 	var wg sync.WaitGroup
@@ -84,8 +72,4 @@ func (a ArtistMap) MakeAnnounceChan(done <-chan struct{}) <-chan ArtistNotificat
 		close(out)
 	}()
 	return out
-}
-
-func monitor(a *exec.Cmd) {
-
 }
