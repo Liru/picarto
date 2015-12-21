@@ -72,6 +72,11 @@ func (a *Artist) Poll() error {
 				log.Fatal(err)
 			}
 
+			defer func() {
+				cmd.Process.Kill()
+				cmd.Process.Wait()
+			}()
+
 			a.Stream = cmd
 
 			_, err = stdout.Read(make([]byte, 1))
@@ -81,14 +86,6 @@ func (a *Artist) Poll() error {
 			if err != nil {
 				log.Println(a.Name, err)
 				continue
-			}
-
-			if err := cmd.Process.Kill(); err != nil {
-				log.Println(err)
-			}
-
-			if _, err := cmd.Process.Wait(); err != nil {
-				log.Println(err)
 			}
 
 			if a.remove {
